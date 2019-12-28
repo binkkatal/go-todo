@@ -12,6 +12,63 @@ import (
 	"github.com/segmentio/ksuid"
 )
 
+const (
+	FindTodo = `
+		SELECT
+			todos.id,
+			todos.title,
+			todos.note,
+			todos.due_date,
+			todos.created_at,
+			todos.updated_at,
+			todos.deleted_at
+		from
+			todos
+		WHERE
+			todos.id = $1 AND todos.deleted_at IS NULL`
+	QueryTodos = `
+		SELECT
+			todos.id,
+			todos.title,
+			todos.note,
+			todos.due_date,
+			todos.created_at,
+			todos.updated_at,
+			todos.deleted_at
+		from
+			todos
+		WHERE
+			%s
+		ORDER BY
+			todos.due_date`
+
+	CreateTodo = `
+		INSERT INTO todos (
+			id,
+			title,
+			note,
+			due_date
+		)
+		VALUES ($1, $2, $3, $4)
+	`
+
+	UpdateTodo = `
+		UPDATE todos
+		SET
+			title=$2,
+			due_date=$3,
+			note=$4,
+			updated_at=$5
+		WHERE id = $1
+	`
+
+	DeleteTodo = `
+		UPDATE todos
+		SET deleted_at=$2
+		WHERE id = $1
+	`
+)
+
 // TodoDB is a database for Todos.
 type TodoDB struct {
 	*DB
@@ -26,21 +83,7 @@ type TodoTx struct {
 func (db *TodoDB) Get(id string) (*models.Todo, error) {
 	var todo models.Todo
 
-	query := `
-		SELECT
-			todos.id,
-			todos.title,
-			todos.note,
-			todos.due_date,
-			todos.created_at,
-			todos.updated_at,
-			todos.deleted_at
-		from
-			todos
-		WHERE
-  		todos.id = $1 AND todos.deleted_at IS NULL`
-
-	err := db.QueryRow(query, id).Scan(
+	err := db.QueryRow(FindTodo, id).Scan(
 		&todo.ID,
 		&todo.Title,
 		&todo.Note,
@@ -60,22 +103,7 @@ func (db *TodoDB) Get(id string) (*models.Todo, error) {
 
 // Query returns a list of Todos.
 func (db *TodoDB) Query(params map[store.TodoQueryParam]interface{}) ([]models.Todo, error) {
-	query := `
-		SELECT
-			todos.id,
-			todos.title,
-			todos.note,
-			todos.due_date,
-			todos.created_at,
-			todos.updated_at,
-			todos.deleted_at
-		from
-			todos
-		WHERE 
-			%s
-		ORDER BY
-			todos.due_date`
-
+	query := QueryTodos
 	wheres := []string{`todos.deleted_at IS NULL`}
 
 	if params != nil {
@@ -122,15 +150,7 @@ func (tx *TodoTx) Create(todo *models.Todo) error {
 	todo.ID = ksuid.New().String()
 	todo.CreatedAt = time.Now()
 
-	query := `
-		INSERT INTO todos (
-			id,
-			title,
-			note,
-			due_date
-		)
-		VALUES ($1, $2, $3, $4)
-	`
+	query := CreateTodo
 	parameters := make([]interface{}, 4)
 	parameters[0] = todo.ID
 	parameters[1] = todo.Title
@@ -148,15 +168,7 @@ func (tx *TodoTx) Update(todo *models.Todo) error {
 	t := time.Now()
 	todo.UpdatedAt = &t
 
-	query := `
-		UPDATE todos
-		SET 
-			title=$2,
-			due_date=$3,
-			note=$4,
-			updated_at=$5
-		WHERE id = $1
-	`
+	query := UpdateTodo
 
 	parameters := make([]interface{}, 5)
 	parameters[0] = todo.ID
